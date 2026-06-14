@@ -1,38 +1,68 @@
 import cv2
+import os
+import csv
 
-# Frame load
-image = cv2.imread("result/frames/frame_0030.jpg")
+frames_folder = "result/frames"
 
-# Crop same as tracking
-crop = image[100:250, 200:450]
+ball_points = []
 
-# Ball points from tracking
-points = [
-    (102, 58),
-    (106, 67),
-    (112, 92),
-    (114, 78),
-    (121, 97),
-    (124, 82),
-    (142, 78),
-    (178, 85)
-]
+for frame_num in range(20, 41):
 
-# Draw points
-for point in points:
-    cv2.circle(crop, point, 5, (0, 0, 255), -1)
+    frame_name = f"frame_{frame_num:04d}.jpg"
+    frame_path = os.path.join(frames_folder, frame_name)
 
-# Draw trajectory
-for i in range(len(points) - 1):
-    cv2.line(
-        crop,
-        points[i],
-        points[i + 1],
-        (255, 0, 0),
-        2
+    image = cv2.imread(frame_path)
+
+    if image is None:
+        continue
+
+    crop = image[100:250, 200:450]
+
+    gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+
+    _, thresh = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY)
+
+    contours, _ = cv2.findContours(
+        thresh,
+        cv2.RETR_EXTERNAL,
+        cv2.CHAIN_APPROX_SIMPLE
     )
 
-cv2.imshow("Automatic Trajectory", crop)
+    best_ball = None
 
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+    for contour in contours:
+
+        area = cv2.contourArea(contour)
+
+        if 2 < area < 20:
+
+            x, y, w, h = cv2.boundingRect(contour)
+
+            ratio = w / h
+
+            if 0.5 < ratio < 1.5:
+
+                center_x = x + w // 2
+                center_y = y + h // 2
+
+                if 60 < center_x < 180 and center_y > 50:
+                    best_ball = (center_x, center_y)
+
+    if best_ball:
+        ball_points.append(
+            [frame_num, best_ball[0], best_ball[1]]
+        )
+
+with open(
+    "result/ball_coordinates.csv",
+    "w",
+    newline=""
+) as file:
+
+    writer = csv.writer(file)
+
+    writer.writerow(["Frame", "X", "Y"])
+
+    writer.writerows(ball_points)
+
+print("CSV File Saved Successfully!")
